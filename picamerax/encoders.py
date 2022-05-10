@@ -169,10 +169,11 @@ class PiEncoder(object):
     encoder_type = None
 
     def __init__(
-            self, parent, camera_port, input_port, format, resize, use_isp_resizer=False, ccm=None, **options):
+            self, parent, camera_port, input_port, format, resize, transform=None, use_isp_resizer=False, ccm=None, **options):
         self.parent = parent
         self.encoder = None
         self.resizer = None
+        self.transform = None
         self.camera_port = camera_port
         self.input_port = input_port
         self.output_port = None
@@ -188,11 +189,24 @@ class PiEncoder(object):
                 if resize:
                     width, height = mo.to_resolution(resize)
                 self._create_resizer(width, height, use_isp_resizer=use_isp_resizer, ccm=ccm)
+            if transform:
+                self._create_transform(transform)
             self._create_encoder(format, **options)
+
             if self.encoder:
                 self.encoder.connection.enable()
+            if self.transform:
+                self.transform.connection.enable()
             if self.resizer:
                 self.resizer.connection.enable()
+
+            if self.encoder:
+                self.encoder.enable()
+            if self.transform:
+                self.transform.enable()
+            if self.resizer:
+                self.resizer.enable()
+
         except:
             self.close()
             raise
@@ -249,6 +263,15 @@ class PiEncoder(object):
         self.resizer.outputs[0].format = mmal.MMAL_ENCODING_I420
         self.resizer.outputs[0].commit()
 
+    def _create_transform(self, transform):
+        self.transform = transform
+        if self.resizer:
+            self.transform.inputs[0].connect(self.resizer.outputs[0])
+        else:
+            self.transform.inputs[0].connect(self.input_port)
+        self.transform.outputs[0].copy_from(self.transform.inputs[0])
+        self.transform.outputs[0].commit()
+
     def _create_encoder(self, format):
         """
         Creates and configures the :class:`~mmalobj.MMALEncoder` component.
@@ -272,7 +295,12 @@ class PiEncoder(object):
         self.encoder = self.encoder_type()
         self.output_port = self.encoder.outputs[0]
         if self.resizer:
-            self.encoder.inputs[0].connect(self.resizer.outputs[0])
+            if self.transform:
+                self.encoder.inputs[0].connect(self.transform.outputs[0])
+            else:
+                self.encoder.inputs[0].connect(self.resizer.outputs[0])
+        elif self.transform:
+            self.encoder.inputs[0].connect(self.transform.outputs[0])
         else:
             self.encoder.inputs[0].connect(self.input_port)
         self.encoder.outputs[0].copy_from(self.encoder.inputs[0])
@@ -435,6 +463,19 @@ class PiEncoder(object):
             # Check whether the callback set an exception
             if self.exception:
                 raise self.exception
+
+        # check transform component
+        if self.transform:
+            if hasattr(self.transform, '_enabled'):
+                result = not self.transform._enabled
+                if result:
+                    self.stop()
+                    error = self.transform._error
+                    self.transform._error = None  # Avoid raising an error again
+                    # Check whether the transform set an exception
+                    if error:
+                        raise error
+
         return result
 
     def stop(self):
@@ -470,11 +511,16 @@ class PiEncoder(object):
         self.stop()
         if self.encoder:
             self.encoder.disconnect()
+        if self.transform:
+            self.transform.disconnect()
         if self.resizer:
             self.resizer.disconnect()
         if self.encoder:
             self.encoder.close()
             self.encoder = None
+        if self.transform:
+            self.transform.close()
+            self.transform = None
         if self.resizer:
             self.resizer.close()
             self.resizer = None
@@ -840,7 +886,7 @@ class PiVideoEncoder(PiEncoder):
             self.output_port.params[mmal.MMAL_PARAMETER_VIDEO_ENCODE_MAX_QUANT] = quality
 
         self.encoder.inputs[0].params[mmal.MMAL_PARAMETER_VIDEO_IMMUTABLE_INPUT] = True
-        self.encoder.enable()
+        #self.encoder.enable()
 
     def start(self, output, motion_output=None):
         """
