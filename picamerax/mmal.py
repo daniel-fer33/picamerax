@@ -1351,6 +1351,25 @@ class MMAL_PARAMETER_LENS_SHADING_T(ct.Structure):
         ('mem_handle_table',    ct.c_uint32),
         ('ref_transform',       ct.c_uint32),
         ]
+
+class MMAL_PARAMETER_CCM_T(ct.Structure):
+    _fields_ = [
+        ('ccm', (MMAL_RATIONAL_T * 3) * 3),
+        ('offsets', ct.c_int32 * 3),
+    ]
+
+    def __repr__(self):
+        txt = f"[[{float(self.ccm[0][0].num / self.ccm[0][0].den)}, {float(self.ccm[0][1].num / self.ccm[0][1].den)}, {float(self.ccm[0][2].num / self.ccm[0][2].den)}], \n" \
+              f" [{float(self.ccm[1][0].num / self.ccm[1][0].den)}, {float(self.ccm[1][1].num / self.ccm[1][1].den)}, {float(self.ccm[1][2].num / self.ccm[1][2].den)}], \n" \
+              f" [{float(self.ccm[2][0].num / self.ccm[2][0].den)}, {float(self.ccm[2][1].num / self.ccm[2][1].den)}, {float(self.ccm[2][2].num / self.ccm[2][2].den)}]]"
+        return txt
+
+class MMAL_PARAMETER_CUSTOM_CCM_T(ct.Structure):
+    _fields_ = [
+        ('hdr',                 MMAL_PARAMETER_HEADER_T),
+        ('enabled',             MMAL_BOOL_T),
+        ('ccm',                 MMAL_PARAMETER_CCM_T),
+        ]
         
 # mmal_parameters_video.h ####################################################
 
