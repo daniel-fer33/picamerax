@@ -457,13 +457,6 @@ class PiEncoder(object):
         to block for. If the encoder finishes successfully within the timeout,
         the method returns ``True``. Otherwise, it returns ``False``.
         """
-        result = self.event.wait(timeout)
-        if result:
-            self.stop()
-            # Check whether the callback set an exception
-            if self.exception:
-                raise self.exception
-
         # check transform component
         if self.transform:
             if hasattr(self.transform, '_enabled'):
@@ -475,6 +468,12 @@ class PiEncoder(object):
                     # Check whether the transform set an exception
                     if error:
                         raise error
+        result = self.event.wait(timeout)
+        if result:
+            self.stop()
+            # Check whether the callback set an exception
+            if self.exception:
+                raise self.exception
 
         return result
 
