@@ -681,9 +681,9 @@ class PiVideoEncoder(PiEncoder):
     encoder_type = mo.MMALVideoEncoder
 
     def __init__(
-            self, parent, camera_port, input_port, format, resize, **options):
+            self, parent, camera_port, input_port, format, resize, transform=None, **options):
         super(PiVideoEncoder, self).__init__(
-                parent, camera_port, input_port, format, resize, **options)
+                parent, camera_port, input_port, format, resize, transform=transform, **options)
         self._next_output = []
         self._split_frame = None
         self.frame = None

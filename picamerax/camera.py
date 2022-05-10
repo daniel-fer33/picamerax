@@ -892,7 +892,7 @@ class PiCamera(object):
                 self, camera_port, output_port, format, resize, **options)
 
     def _get_video_encoder(
-            self, camera_port, output_port, format, resize, **options):
+            self, camera_port, output_port, format, resize, transform=None, **options):
         """
         Construct a video encoder for the requested parameters.
 
@@ -913,11 +913,15 @@ class PiCamera(object):
         pipeline). Finally, *options* includes extra keyword arguments that
         should be passed verbatim to the encoder.
         """
-        encoder_class = (
-                PiRawVideoEncoder if format in self.RAW_FORMATS else
-                PiCookedVideoEncoder)
-        return encoder_class(
+
+        if format in self.RAW_FORMATS:
+            if transform is not None:
+                raise NotImplementedError(f"Transformations not implemented yet for raw formats.")
+            return PiRawVideoEncoder(
                 self, camera_port, output_port, format, resize, **options)
+        else:
+            return PiCookedVideoEncoder(
+                self, camera_port, output_port, format, resize, transform, **options)
 
     def close(self):
         """
@@ -1108,7 +1112,7 @@ class PiCamera(object):
         self._overlays.remove(overlay)
 
     def start_recording(
-            self, output, format=None, resize=None, splitter_port=1, **options):
+            self, output, format=None, resize=None, splitter_port=1, transform=None, **options):
         """
         Start recording video from the camera, storing it in *output*.
 
@@ -1239,7 +1243,7 @@ class PiCamera(object):
             camera_port, output_port = self._get_ports(True, splitter_port)
             format = self._get_video_format(output, format)
             encoder = self._get_video_encoder(
-                    camera_port, output_port, format, resize, **options)
+                    camera_port, output_port, format, resize, transform, **options)
             self._encoders[splitter_port] = encoder
         try:
             encoder.start(output, options.get('motion_output'))
