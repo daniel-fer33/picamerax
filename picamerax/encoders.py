@@ -1103,7 +1103,7 @@ class PiImageEncoder(PiEncoder):
                     1, *thumbnail)
             self.encoder.control.params[mmal.MMAL_PARAMETER_THUMBNAIL_CONFIGURATION] = mp
 
-        self.encoder.enable()
+        #self.encoder.enable()
 
 
 class PiOneImageEncoder(PiImageEncoder):
