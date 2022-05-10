@@ -41,6 +41,7 @@ import datetime
 import threading
 import warnings
 import ctypes as ct
+import numpy as np
 
 from . import bcm_host, mmal, mmalobj as mo
 from .frames import PiVideoFrame, PiVideoFrameType
@@ -168,7 +169,7 @@ class PiEncoder(object):
     encoder_type = None
 
     def __init__(
-            self, parent, camera_port, input_port, format, resize, use_isp_resizer=False, **options):
+            self, parent, camera_port, input_port, format, resize, use_isp_resizer=False, ccm=None, **options):
         self.parent = parent
         self.encoder = None
         self.resizer = None
@@ -182,8 +183,11 @@ class PiEncoder(object):
         try:
             if parent and parent.closed:
                 raise PiCameraRuntimeError("Camera is closed")
-            if resize:
-                self._create_resizer(*mo.to_resolution(resize), use_isp_resizer=use_isp_resizer)
+            if resize is not None or ccm is not None:
+                width, height = None, None
+                if resize:
+                    width, height = mo.to_resolution(resize)
+                self._create_resizer(width, height, use_isp_resizer=use_isp_resizer, ccm=ccm)
             self._create_encoder(format, **options)
             if self.encoder:
                 self.encoder.connection.enable()
@@ -193,7 +197,33 @@ class PiEncoder(object):
             self.close()
             raise
 
-    def _create_resizer(self, width, height, use_isp_resizer=False):
+    @staticmethod
+    def _get_ccm_parameter(ccm_matrix, cmm_offsets):
+        num, den = 8192, 65536
+        _ccm_matrix = np.array(ccm_matrix) * num
+        ccm_parameters = mmal.MMAL_PARAMETER_CUSTOM_CCM_T(
+            hdr=mmal.MMAL_PARAMETER_HEADER_T(
+                mmal.MMAL_PARAMETER_CUSTOM_CCM,
+                ct.sizeof(mmal.MMAL_PARAMETER_CUSTOM_CCM_T),
+            ),
+            enabled=mmal.MMAL_TRUE,
+            ccm=mmal.MMAL_PARAMETER_CCM_T(
+                ccm=(
+                    (mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[0][0]), den=den),
+                     mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[0][1]), den=den),
+                     mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[0][2]), den=den)),
+                    (mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[1][0]), den=den),
+                     mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[1][1]), den=den),
+                     mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[1][2]), den=den)),
+                    (mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[2][0]), den=den),
+                     mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[2][1]), den=den),
+                     mmal.MMAL_RATIONAL_T(num=int(_ccm_matrix[2][2]), den=den)),
+                    ),
+                offsets=(int(cmm_offsets[0]), int(cmm_offsets[1]), int(cmm_offsets[2]))
+            ))
+        return ccm_parameters
+
+    def _create_resizer(self, width, height, use_isp_resizer=False, ccm=None):
         """
         Creates and configures an :class:`~mmalobj.MMALResizer` component.
 
@@ -203,14 +233,20 @@ class PiEncoder(object):
         resizer - it does not connect it to the encoder. The method sets the
         :attr:`resizer` attribute to the constructed resizer component.
         """
-        if use_isp_resizer:
+        if use_isp_resizer or ccm is not None:
+            if isinstance(self.encoder, mo.MMALImageEncoder):
+                raise NotImplementedError(f"ISP Component with Image Encoder doesn't work properly.")
             self.resizer = mo.MMALISPResizer()
         else:
             self.resizer = mo.MMALResizer()
         self.resizer.inputs[0].connect(self.input_port)
         self.resizer.outputs[0].copy_from(self.resizer.inputs[0])
+        if ccm is not None:
+            ccm_parameters = self._get_ccm_parameter(*ccm)
+            self.resizer.inputs[0]._params[mmal.MMAL_PARAMETER_CUSTOM_CCM] = ccm_parameters
+        if width and height:
+            self.resizer.outputs[0].framesize = (width, height)
         self.resizer.outputs[0].format = mmal.MMAL_ENCODING_I420
-        self.resizer.outputs[0].framesize = (width, height)
         self.resizer.outputs[0].commit()
 
     def _create_encoder(self, format):
