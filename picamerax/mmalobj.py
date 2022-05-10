@@ -3447,6 +3447,21 @@ class MMALPythonComponent(MMALPythonBaseComponent):
         Return values are as for normal event handlers (``True`` when no more
         buffers are expected, ``False`` otherwise).
         """
+        try:
+            out = self.outputs[0].get_buffer(False)
+        except PiCameraPortDisabled:
+            # The port was disabled; that probably means we're shutting down so
+            # return True to indicate we're all done and the component should
+            # be disabled
+            return True
+        if out:
+            out.copy_from(buf)
+            try:
+                self.outputs[0].send_buffer(out)
+            except PiCameraPortDisabled:
+                # The port was disabled; same as before this probably means
+                # we're shutting down so return True to indicate we're done
+                return True
         return False
 
     def _handle_format_changed(self, port, buf):
